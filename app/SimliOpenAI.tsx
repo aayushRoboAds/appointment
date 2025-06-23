@@ -535,7 +535,7 @@ useEffect(() => {
           src={`${videoName}`}
           autoPlay
           onEnded={() => setVideoName(null)}
-          className="fixed inset-0 z-40 w-full h-full object-cover transition-all duration-700 ease-in-out"
+          className="fixed inset-0 z-0 w-full h-full object-cover transition-all duration-700 ease-in-out "
         />
       )}
   
