@@ -40,6 +40,25 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
   const [userMessage, setUserMessage] = useState("...");
   const [showPopup, setShowPopup] = useState(false);
   const [videoName, setVideoName] = useState<string | null>(null);  
+  const [email, setEmail] = useState("");
+  const [userid, setUserId] = useState("questions");
+
+const emailRef = useRef(email);
+const useridRef = useRef(userid);
+
+useEffect(() => {
+  emailRef.current = email;
+}, [email]);
+
+useEffect(() => {
+  useridRef.current = userid;
+}, [userid]);
+
+  const handleEmailSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  console.log("Submitted email:", emailRef.current);
+  // Add your submission logic here
+};
 
   // Refs for various components and states
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,6 +94,10 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
     }
   }, [simli_faceid]);
 
+
+  
+
+
   /**
    * Initializes the OpenAI client, sets up event listeners, and connects to the API.
    */
@@ -93,86 +116,91 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
         turn_detection: { type: "server_vad" },
         input_audio_transcription: { model: "whisper-1" },
       });
+
+      // --------- TOOLS ----------
+
+      // Fetches all the questions for the given userid
       openAIClientRef.current.addTool(
-        {
-          name: 'get_product_details',
-          description:
-            'retrieves product details from knowledge base about the product like price, features, and description',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'This is the question about the product that user needs from knowledge base',
-              },
-              userid: {
-                type: 'string',
-                description: 'This the user id that this llm will send to knowledge base llm. Send the current user id',
-              },
-
-            },
-
-            required: ['query','userid'],
-          },
-        },
-        async ({ query,userid }: { query: string,userid:string }) => {
-          const result = await fetch("https://app.holoagent.ai/query", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ query,userid }),
-          });
-        
-          const json = await result.json();
-          // setVideoName("https://faceaqses.s3.us-east-1.amazonaws.com/roboedge/ra_100_centre.mp4");
-          // setShowPopup(true);
-
-          return json;
-        }
-      );
-
+  {
+    name: 'get_user_detail',
+    description: `Fetches the user NAME AND PATIENT ID for the current user using the email - ${emailRef.current}. This is used to schedule the appointment for the user.`,
+    parameters: {
+      type: 'object',
+      properties: {}, // No external input required
+    },
     
+  },
+  async () => {
+    const result = await fetch("https://holoagent.app.n8n.cloud/webhook/userdetailsexp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email:emailRef.current }), // Accessing from component state
+    });
+    console.log("Using email:", emailRef.current);
+    const json = await result.text();
+    return json;
+  }
+);
+
+
+
+      // Scores the user after the interview is finished
       openAIClientRef.current.addTool(
         {
-          name: 'play_product_video',
+          name: 'finalize_appointment',
           description:
-            'plays the video of the product that user needs from the memory. IF the video is not in memory, it will call the knowledge base to fetch the video. If the video link is not available, or if it looks invalid, it will call the knowledge base to fetch the video',
+            'Schedules the appointment for the user after the user requirement is clear and conversation is finished.',
           parameters: {
             type: 'object',
             properties: {
-              query: {
+              ticket_number: {
                 type: 'string',
-                description: 'This is the video about the product that user needs from knowledge base. This is the request that this llm will send to knowledge base llm',
+                description: 'Randomly generated ticket number for the user. Example: 123456',
               },
-              video_name: {
+              appointment_date: {
                 type: 'string',
-                description: 'This is the video url that user needs to play from knowledge base. IF the video is not in memory, it will call the knowledge base with query to fetch the video and play it. This is just the video url without any other text. Ends with .mp4',
+                description: 'The date of the appointment scheduled for the user.',
               },
-              userid: {
+              appointment_time: {
                 type: 'string',
-                description: 'This the user id that this llm will send to knowledge base llm. Send the current user id',
+                description: 'The time of the appointment scheduled for the user.',
               },
-
+              doctor_name: {
+                type: 'string',
+                description: 'The name of the doctor assigned to the user. Options: Dr. Smith, Dr. Johnson, and Dr. Rajesh Gupta',
+              },
+              patient_name: {
+                type: 'string',
+                description: 'The name of the patient for whom the appointment is scheduled.',
+              },
+              patient_id: {
+                type: 'string',
+                description: 'The ID of the patient for whom the appointment is scheduled. ',
+              },
+              counter_number: {
+                type: 'string',
+                description: 'Randomly generated counter number for the appointment. Example: 1A, 2B, etc.',
+              },
             },
-            required: ['query','video_name','userid'],
+            required: ['ticket_number','appointment_date','appointment_time','doctor_name'],
           },
         },
-        async ({ query,video_name,userid }: { query: string,video_name:string,userid:string }) => {
-          const result = await fetch("https://app.holoagent.ai/video", {
+        async ({ ticket_number, appointment_date, appointment_time, doctor_name, patient_name, patient_id, counter_number }: { ticket_number: string, appointment_date: string, appointment_time: string, doctor_name: string, patient_name: string, patient_id: string, counter_number: string }) => {
+          const result = await fetch("https://holoagent.app.n8n.cloud/webhook/finalizeappointment", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ query,userid }),
+            body: JSON.stringify({ ticket_number, appointment_date, appointment_time, doctor_name, patient_name, patient_id, counter_number, userid: emailRef.current }), // Accessing from component state
           });
         
-          const json = await result.json();
-          setVideoName(`/media/${video_name}`);
-          if (videoName !== null) {
+          const json = await result.text();
+          // setVideoName(video_url);
+          // if (videoName !== null) {
             
-          setShowPopup(true);
-        }
+          // setShowPopup(true);}
 
           return json;
         }
@@ -542,26 +570,52 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
         </button>
       )}
   
-      {/* Interaction Buttons */}
-      <div className="flex flex-col items-center z-10 relative">
-        {!isAvatarVisible ? (
-          <button
-            onClick={handleStart}
-            disabled={isLoading}
-            className={cn(
-              "w-full h-[52px] mt-4 disabled:bg-[#343434] disabled:text-white disabled:hover:rounded-[100px] bg-simliblue text-white py-3 px-6 rounded-[100px] transition-all duration-300 hover:text-black hover:bg-white hover:rounded-sm",
-              "flex justify-center items-center"
-            )}
-          >
-            {isLoading ? (
-              <IconSparkleLoader className="h-[20px] animate-loader" />
-            ) : (
-              <span className="font-abc-repro-mono font-bold w-[164px]">
-                Test Interaction
-              </span>
-            )}
-          </button>
+     {/* Interaction Buttons */}
+<div className="flex flex-col items-center z-10 relative">
+  {!isAvatarVisible ? (
+    <>
+      {/* Email Form */}
+      <form className="w-full flex flex-col items-center" onSubmit={handleEmailSubmit}>
+        <label htmlFor="email" className="text-white mb-2 font-abc-repro-mono font-bold">
+          Enter your email:
+        </label>
+        <input
+          
+          id="email"
+          name="email"
+          required
+          className="w-full h-[40px] px-4 mb-4 rounded-[8px] text-black"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="w-full h-[40px] bg-simliblue text-white rounded-[8px] transition-all duration-300 hover:bg-white hover:text-black"
+        >
+          Submit
+        </button>
+      </form>
+
+      {/* Test Interaction Button */}
+      <button
+        onClick={handleStart}
+        disabled={isLoading}
+        className={cn(
+          "w-full h-[52px] mt-4 disabled:bg-[#343434] disabled:text-white disabled:hover:rounded-[100px] bg-simliblue text-white py-3 px-6 rounded-[100px] transition-all duration-300 hover:text-black hover:bg-white hover:rounded-sm",
+          "flex justify-center items-center"
+        )}
+      >
+        {isLoading ? (
+          <IconSparkleLoader className="h-[20px] animate-loader" />
         ) : (
+          <span className="font-abc-repro-mono font-bold w-[164px]">
+            Test Interaction
+          </span>
+        )}
+      </button>
+    </>
+  ) : (
           <div className="flex items-center gap-4 w-full mt-4">
             <button
               onClick={() => {
