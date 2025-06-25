@@ -701,7 +701,7 @@ useEffect(() => {
           <div className="flex flex-col items-center gap-4 w-full mt-4">
             <h1>
               <span className="text-white font-abc-repro-mono font-bold text-lg">
-                {userTranscriptRef.current || "Simli OpenAI Interaction"}
+                {userTranscriptRef.current || ""}
               </span>
               
             </h1>
