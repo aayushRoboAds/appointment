@@ -111,8 +111,11 @@ useEffect(() => {
 
   const handleEmailSubmit = (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
-  console.log("Submitted email:", emailRef.current);
-  // Add your submission logic here
+  // Get the value directly from the form input
+  const formData = new FormData(e.currentTarget);
+  const submittedEmail = formData.get("email") as string;
+  setEmail(submittedEmail);
+  console.log("Submitted email:", submittedEmail);
 };
 
   // Refs for various components and states
@@ -322,8 +325,12 @@ useEffect(() => {
 
     if (item.type === "message" && item.role === "assistant") {
       console.log("Assistant message detected");
-      setAvatarTranscript(item.content[0].transcript);
-      console.log("Assistant transcript:", item.content[0].transcript);
+
+      setTimeout(() => {
+        setAvatarTranscript(item.content[0].transcript || "...");
+        console.log("Assistant transcript:", item.content[0].transcript);
+      }, 100);
+      
       if (delta && delta.audio) {
         const downsampledAudio = downsampleAudio(delta.audio, 24000, 16000);
         audioChunkQueueRef.current.push(downsampledAudio);
@@ -334,8 +341,11 @@ useEffect(() => {
     } else if (item.type === "message" && item.role === "user") {
       setUserMessage(item.content[0].transcript);
       console.log("User message detected:", item.content[0].transcript);
-      // Update user transcript state
-      setUserTranscript(item.content[0].transcript);
+
+      // Update user message state
+      setTimeout(() => {
+        setUserTranscript(item.content[0].transcript || "...");
+      }, 100); // Delay to ensure the state is updated after the message is processed
     }
   }, []);
 
@@ -608,6 +618,16 @@ useEffect(() => {
   }, []);
 
 
+  function reconnectOpenAIClient(event: React.MouseEvent<HTMLButtonElement, MouseEvent>): void {
+    event.preventDefault();
+    // Disconnect if already connected
+    if (openAIClientRef.current && openAIClientRef.current.isConnected()) {
+      openAIClientRef.current.disconnect();
+    }
+    // Re-initialize the OpenAI client
+    initializeOpenAIClient();
+  }
+
   return (
     <>
       {/* Fullscreen Background Video Layer */}
@@ -619,7 +639,11 @@ useEffect(() => {
           className="fixed inset-0 z-0 w-full h-full object-cover transition-all duration-700 ease-in-out "
         />
       )}
-  
+      <h3 className="text-white font-abc-repro-mono text-sm align-left mb-2 right-4 top-4 absolute z-50">
+              {openAIClientRef.current?.isConnected()
+                ? "🟢 CONNECTED"
+                : "🔴 DISCONNECTED"}
+            </h3>
       {/* Avatar Wrapper - Responsive Stage */}
       <div
         className={cn(
@@ -637,6 +661,7 @@ useEffect(() => {
               : "scale-100"
           )}
         >
+
           <VideoBox video={videoRef} audio={audioRef} />
         </div>
       </div>
@@ -650,33 +675,53 @@ useEffect(() => {
           ✕
         </button>
       )}
+      {!emailRef.current ? (
+        <>
+          <div className="flex justify-center items-center w-1/2 mt-4 mb-2 px-4 absolute top-1/2 z-50">
+            {!isAvatarVisible ? (
+              <>
+                {/* Email Form */}
+                <form
+                  className="w-full flex flex-col items-center p-4 border border-white/20 rounded-lg"
+                  onSubmit={handleEmailSubmit}
+                >
+                  <label
+                    htmlFor="email"
+                    className="text-white mb-2 font-abc-repro-mono font-bold"
+                  >
+                    Enter your email:
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    required
+                    className="w-full h-[40px] px-4 mb-4 rounded-[8px] text-black"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className="w-full h-[40px] bg-simliblue text-white rounded-[8px] transition-all duration-300 hover:bg-white hover:text-black"
+                  >
+                    Submit
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="hidden"></div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="hidden"></div>
+      )}
   
      {/* Interaction Buttons */}
 <div className="flex flex-col items-center z-10 relative">
   {!isAvatarVisible ? (
     <>
-      {/* Email Form */}
-      <form className="w-full flex flex-col items-center" onSubmit={handleEmailSubmit}>
-        <label htmlFor="email" className="text-white mb-2 font-abc-repro-mono font-bold">
-          Enter your email:
-        </label>
-        <input
-          
-          id="email"
-          name="email"
-          required
-          className="w-full h-[40px] px-4 mb-4 rounded-[8px] text-black"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <button
-          type="submit"
-          className="w-full h-[40px] bg-simliblue text-white rounded-[8px] transition-all duration-300 hover:bg-white hover:text-black"
-        >
-          Submit
-        </button>
-      </form>
+      
 
       {/* Test Interaction Button */}
       
@@ -708,11 +753,35 @@ useEffect(() => {
             <h2 className="text-white font-abc-repro-mono text-sm">
               {avatarTranscriptRef.current || "Waiting for response..."}
             </h2>
-            <h3 className="text-white font-abc-repro-mono text-sm">
-              {openAIClientRef.current?.isConnected()
-                ? "Connected 🟢"
-                : "Disconnected 🔴"}
+            
+            
+            <h3 className="text-white font-abc-repro-mono font-bold text-lg">
+              {emailRef.current ? `Email: ${emailRef.current}` : "No email provided"}
             </h3>
+                        <div className="grid grid-cols-3 gap-2 border border-white/20 p-4 rounded-lg w-full divide-x divide-y divide-white/20">
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {ticketNumberRef.current ? `Ticket Number: ${ticketNumberRef.current}` : "No ticket number provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {appointmentDateRef.current ? `Appointment Date: ${appointmentDateRef.current}` : "No appointment date provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {appointmentTimeRef.current ? `Appointment Time: ${appointmentTimeRef.current}` : "No appointment time provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {doctorNameRef.current ? `Doctor Name: ${doctorNameRef.current}` : "No doctor name provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {patientNameRef.current ? `Patient Name: ${patientNameRef.current}` : "No patient name provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {patientIdRef.current ? `Patient ID: ${patientIdRef.current}` : "No patient ID provided"}
+            </h3>
+            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+              {counterNumberRef.current ? `Counter Number: ${counterNumberRef.current}` : "No counter number provided"}
+            </h3>
+          </div>
+
             <button
               onClick={() => {
                 handleStop();
@@ -724,34 +793,6 @@ useEffect(() => {
                 Stop Interaction
               </span>
             </button>
-            <h3 className="text-white font-abc-repro-mono font-bold text-lg">
-              {emailRef.current ? `Email: ${emailRef.current}` : "No email provided"}
-            </h3>
-                        <div className="grid grid-cols-3 gap-2 border border-white/20 p-4 rounded-lg w-full divide-x divide-y divide-white/20">
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {ticketNumberRef.current ? `Ticket Number: ${ticketNumberRef.current}` : "No ticket number provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {appointmentDateRef.current ? `Appointment Date: ${appointmentDateRef.current}` : "No appointment date provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {appointmentTimeRef.current ? `Appointment Time: ${appointmentTimeRef.current}` : "No appointment time provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {doctorNameRef.current ? `Doctor Name: ${doctorNameRef.current}` : "No doctor name provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {patientNameRef.current ? `Patient Name: ${patientNameRef.current}` : "No patient name provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {patientIdRef.current ? `Patient ID: ${patientIdRef.current}` : "No patient ID provided"}
-  </h3>
-  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
-    {counterNumberRef.current ? `Counter Number: ${counterNumberRef.current}` : "No counter number provided"}
-  </h3>
-</div>
-
-            
 
           </div>
           
