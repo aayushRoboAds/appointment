@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { use, useCallback, useEffect, useRef, useState } from "react";
 import { RealtimeClient } from "@openai/realtime-api-beta";
 import { SimliClient } from "simli-client";
 import VideoBox from "./Components/VideoBox";
@@ -42,17 +42,72 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
   const [videoName, setVideoName] = useState<string | null>(null);  
   const [email, setEmail] = useState("");
   const [userid, setUserId] = useState("questions");
+  const [ticket_number, setTicketNumber] = useState("");
+  const [appointment_date, setAppointmentDate] = useState("");
+  const [appointment_time, setAppointmentTime] = useState("");
+  const [doctor_name, setDoctorName] = useState("");
+  const [patient_name, setPatientName] = useState("");
+  const [patient_id, setPatientId] = useState("");
+  const [counter_number, setCounterNumber] = useState("");  
+  const [user_transcript, setUserTranscript] = useState("");
+  const [avatar_transcript, setAvatarTranscript] = useState("");
 
 const emailRef = useRef(email);
 const useridRef = useRef(userid);
+const ticketNumberRef = useRef(ticket_number);
+const appointmentDateRef = useRef(appointment_date);
+const appointmentTimeRef = useRef(appointment_time);
+const doctorNameRef = useRef(doctor_name);
+const patientNameRef = useRef(patient_name);
+const patientIdRef = useRef(patient_id);
+const counterNumberRef = useRef(counter_number);
+const userTranscriptRef = useRef(user_transcript);
+const avatarTranscriptRef = useRef(avatar_transcript);
 
+// Update refs whenever the corresponding state changes
 useEffect(() => {
   emailRef.current = email;
 }, [email]);
 
 useEffect(() => {
+  userTranscriptRef.current = userMessage;
+}, [userMessage]);
+
+useEffect(() => {
+  avatarTranscriptRef.current = avatar_transcript;
+}, [avatar_transcript]);
+
+useEffect(() => {
   useridRef.current = userid;
 }, [userid]);
+
+useEffect(() => {
+  ticketNumberRef.current = ticket_number;
+}, [ticket_number]);
+
+useEffect(() => {
+  appointmentDateRef.current = appointment_date;
+}, [appointment_date]);
+
+useEffect(() => {
+  appointmentTimeRef.current = appointment_time;
+}, [appointment_time]);
+
+useEffect(() => {
+  doctorNameRef.current = doctor_name;
+}, [doctor_name]);
+
+useEffect(() => {
+  patientNameRef.current = patient_name;
+}, [patient_name]);
+
+useEffect(() => {
+  patientIdRef.current = patient_id;
+}, [patient_id]);
+
+useEffect(() => {
+  counterNumberRef.current = counter_number;
+}, [counter_number]);
 
   const handleEmailSubmit = (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
@@ -188,12 +243,32 @@ useEffect(() => {
           },
         },
         async ({ ticket_number, appointment_date, appointment_time, doctor_name, patient_name, patient_id, counter_number }: { ticket_number: string, appointment_date: string, appointment_time: string, doctor_name: string, patient_name: string, patient_id: string, counter_number: string }) => {
+
+          // Update the refs with the latest values
+          ticketNumberRef.current = ticket_number;
+          appointmentDateRef.current = appointment_date;
+          appointmentTimeRef.current = appointment_time;
+          doctorNameRef.current = doctor_name;
+          patientNameRef.current = patient_name;
+          patientIdRef.current = patient_id;
+          counterNumberRef.current = counter_number;
+
+          console.log("Finalizing appointment with details:", {
+            ticket_number,
+            appointment_date,
+            appointment_time,
+            doctor_name,
+            patient_name,
+            patient_id,
+            counter_number,
+          });
+
           const result = await fetch("https://holoagent.app.n8n.cloud/webhook/finalizeappointment", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ ticket_number, appointment_date, appointment_time, doctor_name, patient_name, patient_id, counter_number, userid: emailRef.current }), // Accessing from component state
+            body: JSON.stringify({ ticket_number: ticketNumberRef.current, appointment_date: appointmentDateRef.current, appointment_time: appointmentTimeRef.current, doctor_name: doctorNameRef.current, patient_name: patientNameRef.current, patient_id: patientIdRef.current, counter_number: counterNumberRef.current, userid: emailRef.current }), // Accessing from component state
           });
         
           const json = await result.text();
@@ -201,6 +276,7 @@ useEffect(() => {
           // if (videoName !== null) {
             
           // setShowPopup(true);}
+
 
           return json;
         }
@@ -246,6 +322,8 @@ useEffect(() => {
 
     if (item.type === "message" && item.role === "assistant") {
       console.log("Assistant message detected");
+      setAvatarTranscript(item.content[0].transcript);
+      console.log("Assistant transcript:", item.content[0].transcript);
       if (delta && delta.audio) {
         const downsampledAudio = downsampleAudio(delta.audio, 24000, 16000);
         audioChunkQueueRef.current.push(downsampledAudio);
@@ -255,6 +333,9 @@ useEffect(() => {
       }
     } else if (item.type === "message" && item.role === "user") {
       setUserMessage(item.content[0].transcript);
+      console.log("User message detected:", item.content[0].transcript);
+      // Update user transcript state
+      setUserTranscript(item.content[0].transcript);
     }
   }, []);
 
@@ -598,6 +679,7 @@ useEffect(() => {
       </form>
 
       {/* Test Interaction Button */}
+      
       <button
         onClick={handleStart}
         disabled={isLoading}
@@ -616,7 +698,21 @@ useEffect(() => {
       </button>
     </>
   ) : (
-          <div className="flex items-center gap-4 w-full mt-4">
+          <div className="flex flex-col items-center gap-4 w-full mt-4">
+            <h1>
+              <span className="text-white font-abc-repro-mono font-bold text-lg">
+                {userTranscriptRef.current || "Simli OpenAI Interaction"}
+              </span>
+              
+            </h1>
+            <h2 className="text-white font-abc-repro-mono text-sm">
+              {avatarTranscriptRef.current || "Waiting for response..."}
+            </h2>
+            <h3 className="text-white font-abc-repro-mono text-sm">
+              {openAIClientRef.current?.isConnected()
+                ? "Connected 🟢"
+                : "Disconnected 🔴"}
+            </h3>
             <button
               onClick={() => {
                 handleStop();
@@ -628,7 +724,37 @@ useEffect(() => {
                 Stop Interaction
               </span>
             </button>
+            <h3 className="text-white font-abc-repro-mono font-bold text-lg">
+              {emailRef.current ? `Email: ${emailRef.current}` : "No email provided"}
+            </h3>
+                        <div className="grid grid-cols-3 gap-2 border border-white/20 p-4 rounded-lg w-full divide-x divide-y divide-white/20">
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {ticketNumberRef.current ? `Ticket Number: ${ticketNumberRef.current}` : "No ticket number provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {appointmentDateRef.current ? `Appointment Date: ${appointmentDateRef.current}` : "No appointment date provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {appointmentTimeRef.current ? `Appointment Time: ${appointmentTimeRef.current}` : "No appointment time provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {doctorNameRef.current ? `Doctor Name: ${doctorNameRef.current}` : "No doctor name provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {patientNameRef.current ? `Patient Name: ${patientNameRef.current}` : "No patient name provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {patientIdRef.current ? `Patient ID: ${patientIdRef.current}` : "No patient ID provided"}
+  </h3>
+  <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    {counterNumberRef.current ? `Counter Number: ${counterNumberRef.current}` : "No counter number provided"}
+  </h3>
+</div>
+
+            
+
           </div>
+          
         )}
       </div>
     </>
