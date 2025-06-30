@@ -49,8 +49,8 @@ const SimliOpenAI: React.FC<SimliOpenAIProps> = ({
   const [patient_name, setPatientName] = useState("");
   const [patient_id, setPatientId] = useState("");
   const [counter_number, setCounterNumber] = useState("");  
-  const [user_transcript, setUserTranscript] = useState("");
-  const [avatar_transcript, setAvatarTranscript] = useState("");
+  const [user_transcript, setUserTranscript] = useState("...");
+  const [avatar_transcript, setAvatarTranscript] = useState("...");
 
 const emailRef = useRef(email);
 const useridRef = useRef(userid);
@@ -131,6 +131,22 @@ useEffect(() => {
   const audioChunkQueueRef = useRef<Int16Array[]>([]);
   const isProcessingChunkRef = useRef(false);
 
+  // load instructions on first run
+  const loadInstructions = useCallback(async () => {
+    const result = await fetch("https://holoagent.app.n8n.cloud/webhook/getinstructions", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const json = await result.text();
+    console.log("Loaded instructions:", json);
+    return json;
+  }, []);
+
+
+  //const dynamicInstructions = loadInstructions();
+
   /**
    * Initializes the Simli client with the provided configuration.
    */
@@ -149,6 +165,7 @@ useEffect(() => {
 
       simliClient.Initialize(SimliConfig as any);
       console.log("Simli Client initialized");
+      //const dynamicInstructions =  loadInstructions();
     }
   }, [simli_faceid]);
 
@@ -168,8 +185,11 @@ useEffect(() => {
         dangerouslyAllowAPIKeyInBrowser: true,
       });
 
+      // Fetch dynamic instructions before updating the session
+      const dynamicInstructions = await loadInstructions();
+
       await openAIClientRef.current.updateSession({
-        instructions: initialPrompt,
+        instructions: initialPrompt + dynamicInstructions,
         voice: openai_voice,
         turn_detection: { type: "server_vad" },
         input_audio_transcription: { model: "whisper-1" },
@@ -197,6 +217,56 @@ useEffect(() => {
       body: JSON.stringify({ email:emailRef.current }), // Accessing from component state
     });
     console.log("Using email:", emailRef.current);
+    const json = await result.text();
+    return json;
+  }
+);
+// openAIClientRef.current.addTool(
+//   {
+//     name: 'get_instructions',
+//     description: `Fetches the instructions required to run this LLM. This is used to set the initial instructions for the LLM. This is always required on starting the conversation.`,
+//     parameters: {
+//       type: 'object',
+//       properties: {}, // No external input required
+//     },
+    
+//   },
+//   async () => {
+//     const result = await fetch("https://holoagent.app.n8n.cloud/webhook/getinstructions", {
+//       method: "GET",
+//       headers: {
+//         "Content-Type": "application/json",
+//       },
+//     });
+//     const json = await result.text();
+//     return json;
+//   }
+// );
+
+openAIClientRef.current.addTool(
+  {
+    name: 'set_instruction',
+    description: `Whenever the user commands to follow a certain set of instructions, this tool is used to set the instructions for the LLM. Use this to persist the instructions for the LLM for future use. For example, if user says "always greet me with a joke", you can use this tool to set the instructions for the LLM to always greet the user with a joke.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        instruction:{
+          type: 'string',
+          description: 'The instruction to set for the LLM. Example: "always greet me with a joke"',
+        }
+      }, required: ['instruction'],
+    },
+    
+  },
+  async ({ instruction }:{ instruction: string }) => {
+    const result = await fetch("https://holoagent.app.n8n.cloud/webhook/setinstructions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ instruction }), // Accessing from component state
+    });
+    console.log(instruction);
     const json = await result.text();
     return json;
   }
@@ -284,6 +354,41 @@ useEffect(() => {
           return json;
         }
       );
+      openAIClientRef.current.addTool(
+        {
+          name: "save_conversation_transcript",
+          description:
+            "Saves the conversation transcript to the database for future reference and analysis as a summary.",
+          parameters: {
+            type: "object",
+            properties:{
+              
+              conversation_summary: {
+                type: "string",
+                description: "The summary of the conversation.",
+              },
+              
+            }, required: [ "conversation_summary" ],
+
+          }},
+        async ({ conversation_summary }: { conversation_summary: string }) => {
+          // Update the refs with the latest values
+          const result = fetch("https://holoagent.app.n8n.cloud/webhook/saveconversationtranscript", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: emailRef.current,
+                conversation_summary,
+            }),
+          }); 
+          console.log("Saving conversation transcript with details:", {
+            email: emailRef.current,
+            conversation_summary,
+          });
+        }
+      );
 
       // Set up event listeners
       openAIClientRef.current.on(
@@ -310,6 +415,7 @@ useEffect(() => {
       });
 
       setIsAvatarVisible(true);
+      
     } catch (error: any) {
       console.error("Error initializing OpenAI client:", error);
       setError(`Failed to initialize OpenAI client: ${error.message}`);
@@ -357,6 +463,8 @@ useEffect(() => {
     simliClient?.ClearBuffer();
     openAIClientRef.current?.cancelResponse("");
   };
+
+  
 
   /**
    * Processes the next audio chunk in the queue.
@@ -743,41 +851,39 @@ useEffect(() => {
       </button>
     </>
   ) : (
-          <div className="flex flex-col items-center gap-4 w-full mt-4">
+          <div className="flex flex-col items-center gap-4 w-full mt-4 h-100vh overflow-y-auto bg-white p-4 rounded-lg text-black">
             <h1>
-              <span className="text-white font-abc-repro-mono font-bold text-lg">
+              <span className="text-black font-abc-repro-mono font-bold text-lg">
                 {userTranscriptRef.current || ""}
               </span>
               
             </h1>
-            <h2 className="text-white font-abc-repro-mono text-sm">
-              {avatarTranscriptRef.current || "Waiting for response..."}
+            <h2 className="text-black font-abc-repro-mono text-sm">
+              {avatarTranscriptRef.current || ""}
             </h2>
-            
-            
-            <h3 className="text-white font-abc-repro-mono font-bold text-lg">
+            <h3 className="text-black font-abc-repro-mono font-bold text-lg">
               {emailRef.current ? `Email: ${emailRef.current}` : "No email provided"}
             </h3>
-                        <div className="grid grid-cols-3 gap-2 border border-white/20 p-4 rounded-lg w-full divide-x divide-y divide-white/20">
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+    <div className="grid grid-cols-3 gap-2 p-8 rounded-lg w-full divide-x divide-y divide-blue/20 m-10">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {ticketNumberRef.current ? `Ticket Number: ${ticketNumberRef.current}` : "No ticket number provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {appointmentDateRef.current ? `Appointment Date: ${appointmentDateRef.current}` : "No appointment date provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {appointmentTimeRef.current ? `Appointment Time: ${appointmentTimeRef.current}` : "No appointment time provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {doctorNameRef.current ? `Doctor Name: ${doctorNameRef.current}` : "No doctor name provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {patientNameRef.current ? `Patient Name: ${patientNameRef.current}` : "No patient name provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {patientIdRef.current ? `Patient ID: ${patientIdRef.current}` : "No patient ID provided"}
             </h3>
-            <h3 className="text-white font-abc-repro-mono text-sm px-2 py-1">
+            <h3 className="text-black font-abc-repro-mono text-sm px-2 py-1">
               {counterNumberRef.current ? `Counter Number: ${counterNumberRef.current}` : "No counter number provided"}
             </h3>
           </div>
